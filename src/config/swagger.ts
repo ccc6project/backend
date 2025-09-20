@@ -5,9 +5,9 @@ const options = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "User API",
+      title: "AMEX Credit Card Service",
       version: "1.0.0",
-      description: "API for user registration, login, logout, and user list"
+      description: "Administración de las tarjetas de crédito"
     },
     components: {
       securitySchemes: {

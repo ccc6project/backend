@@ -6,16 +6,16 @@ const router = Router();
 /**
  * @swagger
  * tags:
- *   name: Users
- *   description: User management and authentication
+ *   name: Usuarios
+ *   description: Manejo de usuarios y autenticacion
  */
 
 /**
  * @swagger
- * /api/users/register:
+ * /api/usuarios/register:
  *   post:
- *     summary: Register a new user
- *     tags: [Users]
+ *     summary: Registrar nuevo usuario
+ *     tags: [Usuarios]
  *     requestBody:
  *       required: true
  *       content:
@@ -41,18 +41,18 @@ const router = Router();
  *                 type: string
  *     responses:
  *       200:
- *         description: User registered successfully
+ *         description: Usuario Registrado Exitosamente
  *       500:
  *         description: Server error
  */
-router.post("/register", createUser);   // POST /api/users/register
+router.post("/signup", createUser);   // POST /api/usuarios/register
 
 /**
  * @swagger
- * /api/users/login:
+ * /api/usuarios/login:
  *   post:
- *     summary: Login a user and get JWT token
- *     tags: [Users]
+ *     summary: Login, JWT
+ *     tags: [Usuarios]
  *     requestBody:
  *       required: true
  *       content:
@@ -69,34 +69,34 @@ router.post("/register", createUser);   // POST /api/users/register
  *                 type: string
  *     responses:
  *       200:
- *         description: Successful login
+ *         description: Login Exitoso
  *       401:
- *         description: Invalid email or password
+ *         description: Email or Contrasena invalida
  */
-router.post("/login", loginUser);       // POST /api/users/login
+router.post("/login", loginUser);       // POST /api/usuarios/login
 
 /**
  * @swagger
- * /api/users/logout:
+ * /api/usuarios/logout:
  *   post:
- *     summary: Logout a user (client should delete JWT)
- *     tags: [Users]
+ *     summary: Logout, delete JWT
+ *     tags: [Usuarios]
  *     responses:
  *       200:
  *         description: Logged out
  */
-router.post("/logout", logoutUser);     // POST /api/users/logout
+router.post("/logout", logoutUser);     // POST /api/usuarios/logout
 
 /**
  * @swagger
- * /api/users:
+ * /api/usuarios:
  *   get:
- *     summary: Get all users
- *     tags: [Users]
+ *     summary: Mostrar todo los usuarios
+ *     tags: [Usuarios]
  *     responses:
  *       200:
- *         description: List of users
+ *         description: Lista de usuarios
  */
-router.get("/", getAllUsers);           // GET /api/users
+router.get("/", getAllUsers);           // GET /api/usuarios
 
 export default router;
