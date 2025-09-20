@@ -3,8 +3,8 @@ import { Pool, QueryArrayConfig } from "pg";
 const POSTGRES_HOST = process.env.POSTGRES_HOST || "localhost";
 const POSTGRES_USER = process.env.POSTGRES_USER || "postgres";
 const POSTGRES_DB = process.env.POSTGRES_DB || "postgres";
-const POSTGRES_PASS = process.env.POSTGRES_PASS || "1234";
-const POSTGRES_PORT = Number(process.env.POSTGRES_PORT) || 5432;
+const POSTGRES_PASS = process.env.POSTGRES_PASS || "o1234";
+const POSTGRES_PORT = Number(process.env.POSTGRES_PORT) || 4321;
 
 const pool = new Pool({
     user: POSTGRES_USER,

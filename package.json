@@ -4,7 +4,7 @@
   "description": "Credit Cards System",
   "main": "server.ts",
   "scripts": {
-    "dev": "npx tsx watch src/server.js",
+    "dev": "npx tsx watch src/server.ts",
     "build": "tsx src/server.ts --outDir dist",
     "start": "node dist/server.ts"
   },
@@ -28,7 +28,10 @@
     "morgan": "^1.10.1",
     "openai": "^5.20.3",
     "pg": "^8.16.3",
-    "pg-promise": "^12.1.3"
+    "pg-promise": "^12.1.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -39,6 +42,9 @@
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.5.1",
     "@types/pg": "^8.15.5",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
+    "@types/xml2js": "^0.4.14",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
