@@ -1,4 +1,3 @@
-// src/routes/bankAccount.routes.ts
 import { Router } from "express";
 import {
   getUserBankAccounts,
@@ -12,8 +11,34 @@ import { authMiddleware } from "../middlewares/auth.ts";
 /**
  * @swagger
  * tags:
- *   name: BankAccounts
- *   description: Bank account management for users
+ *   name: CuentasBanco
+ *   description: Manejo cuentas de banco por usuario
+ */
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     CuentaBanco:
+ *       type: object
+ *       properties:
+ *         account_id:
+ *           type: integer
+ *         user_id:
+ *           type: integer
+ *         bank_id:
+ *           type: integer
+ *         account_number:
+ *           type: string
+ *         account_type:
+ *           type: string
+ *         balance:
+ *           type: number
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
  */
 
 const router = Router();
@@ -21,24 +46,36 @@ router.use(authMiddleware);
 
 /**
  * @swagger
- * /api/bank-accounts:
+ * /api/cuentas-banco:
  *   get:
- *     summary: Get bank accounts of current user
- *     tags: [BankAccounts]
+ *     summary: Listar cuentas de banco del usuario
+ *     tags: [CuentasBanco]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: List of user's bank accounts
+ *         description: Listado de cuentas del usuario
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CuentaBanco'
+ *       401:
+ *         description: No autorizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/", getUserBankAccounts);
 
 /**
  * @swagger
- * /api/bank-accounts:
+ * /api/cuentas-banco:
  *   post:
- *     summary: Add a bank account to the user
- *     tags: [BankAccounts]
+ *     summary: Añadir cuenta de banco al usuario
+ *     tags: [CuentasBanco]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -57,16 +94,38 @@ router.get("/", getUserBankAccounts);
  *                 type: string
  *     responses:
  *       201:
- *         description: Bank account created
+ *         description: Cuenta creada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CuentaBanco'
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: No autorizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Error en el servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post("/", addBankAccount);
 
 /**
  * @swagger
- * /api/bank-accounts/{id}:
+ * /api/cuentas-banco/{id}:
  *   put:
- *     summary: Edit bank account of the user
- *     tags: [BankAccounts]
+ *     summary: Editar cuenta de banco
+ *     tags: [CuentasBanco]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -75,7 +134,7 @@ router.post("/", addBankAccount);
  *         required: true
  *         schema:
  *           type: integer
- *         description: Account ID
+ *         description: ID de la cuenta
  *     requestBody:
  *       required: true
  *       content:
@@ -89,18 +148,32 @@ router.post("/", addBankAccount);
  *                 type: string
  *     responses:
  *       200:
- *         description: Bank account updated
+ *         description: Cuenta actualizada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CuentaBanco'
  *       404:
- *         description: Not found
+ *         description: Cuenta no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: No autorizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.put("/:id", editBankAccount);
 
 /**
  * @swagger
- * /api/bank-accounts/{id}/deposit:
+ * /api/cuentas-banco/{id}/deposito:
  *   post:
- *     summary: Make deposit to bank account
- *     tags: [BankAccounts]
+ *     summary: Hacer depósito a la cuenta de banco
+ *     tags: [CuentasBanco]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -109,7 +182,7 @@ router.put("/:id", editBankAccount);
  *         required: true
  *         schema:
  *           type: integer
- *         description: Account ID
+ *         description: ID de la cuenta
  *     requestBody:
  *       required: true
  *       content:
@@ -122,20 +195,43 @@ router.put("/:id", editBankAccount);
  *                 type: number
  *     responses:
  *       200:
- *         description: Deposit successful
+ *         description: Depósito exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 account:
+ *                   $ref: '#/components/schemas/CuentaBanco'
  *       400:
- *         description: Invalid amount
+ *         description: Monto inválido
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Not found
+ *         description: Cuenta no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: No autorizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/:id/deposit", depositToBankAccount);
+router.post("/:id/deposito", depositToBankAccount);
 
 /**
  * @swagger
- * /api/bank-accounts/{id}:
+ * /api/cuentas-banco/{id}:
  *   delete:
- *     summary: Delete a bank account
- *     tags: [BankAccounts]
+ *     summary: Eliminar cuenta de banco
+ *     tags: [CuentasBanco]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -144,12 +240,31 @@ router.post("/:id/deposit", depositToBankAccount);
  *         required: true
  *         schema:
  *           type: integer
- *         description: Account ID
+ *         description: ID de la cuenta
  *     responses:
  *       200:
- *         description: Account deleted
+ *         description: Cuenta eliminada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 account:
+ *                   $ref: '#/components/schemas/CuentaBanco'
  *       404:
- *         description: Not found
+ *         description: Cuenta no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: No autorizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete("/:id", deleteBankAccount);
 

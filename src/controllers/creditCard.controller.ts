@@ -1,10 +1,9 @@
 // src/controllers/creditCard.controller.ts
 import { Request, Response } from "express";
 import { pool } from "../../db/connection.ts";
-import { generateCardNumber, generateCVV, generateExpiration } from "../utils/creditCardGenerator.ts";
+import { generateCardNumber, generateCVV, generateExpiration, validateDateYMD, validateExpDate } from "../utils/creditCardGenerator.ts";
 import { chooseFormat, sendFormatted } from "../utils/ResponseFormat.ts";
 
-// Helper: Check if user has bank account
 async function getUserBankAccount(user_id: number, bank_account_id?: number) {
   if (bank_account_id) {
     const r = await pool.query(
@@ -21,37 +20,42 @@ async function getUserBankAccount(user_id: number, bank_account_id?: number) {
   }
 }
 
-// 1. Give a credit card to the user
 export const issueCreditCard = async (req: Request, res: Response) => {
   const user_id = req.user.user_id;
   const {
     bank_account_id,
     amount_authorized,
-    cut_date,
-    due_date,
+    cut_date,    // yyyymmdd
+    due_date,    // yyyymmdd
     interest,
-    amex,
-    expiration_date, // optional override
-    cardholder_name, // optional override
-    credit_limit, // optional override (for clarity)
+    expiration_date, // yyyymm
+    cardholder_name, // opcional
+    credit_limit,    // opcional
+    emisor_id        // 15 chars
   } = req.body;
   try {
-    // 1. Ensure user has a bank account
+    // Validaciones formato
+    if (expiration_date && !validateExpDate(expiration_date))
+      return res.status(400).json({ error: "Formato de fecha de vencimiento incorrecto (yyyymm)" });
+    if (cut_date && !validateDateYMD(cut_date))
+      return res.status(400).json({ error: "Formato de fecha de corte incorrecto (yyyymmdd)" });
+    if (due_date && !validateDateYMD(due_date))
+      return res.status(400).json({ error: "Formato de fecha de pago incorrecto (yyyymmdd)" });
+    if (emisor_id && emisor_id.length !== 15)
+      return res.status(400).json({ error: "El emisor debe tener 15 caracteres" });
+
     const account = await getUserBankAccount(user_id, bank_account_id);
     if (!account) return res.status(400).json({ error: "No valid bank account found for user." });
 
-    // 2. Generate credit card data
-    const isAmex = !!amex;
-    const card_number = generateCardNumber(isAmex);
-    const cvv = generateCVV(isAmex);
+    const card_number = generateCardNumber();
+    const cvv = generateCVV();
     const name = cardholder_name || req.user.name || "CARDHOLDER";
     const exp = expiration_date || generateExpiration();
     const limit = credit_limit || amount_authorized || 10000;
 
-    // 3. Insert credit card
     const result = await pool.query(
       `INSERT INTO credit_card
-        (user_id, bank_id, card_number, cardholder_name, expiration_date, security_code, credit_limit, available_credit, status, cut_date, due_date, interest, bank_account_id, is_amex)
+        (user_id, bank_id, card_number, cardholder_name, expiration_date, security_code, credit_limit, available_credit, status, cut_date, due_date, interest, bank_account_id, emisor_id)
       VALUES
         ($1, $2, $3, $4, $5, $6, $7, $7, 'active', $8, $9, $10, $11, $12)
       RETURNING *`,
@@ -67,7 +71,7 @@ export const issueCreditCard = async (req: Request, res: Response) => {
         due_date || null,
         interest || 0.28,
         account.account_id,
-        isAmex,
+        emisor_id || 'CREDITSYSTEM001'  // ejemplo
       ]
     );
     const card = result.rows[0];
@@ -78,7 +82,6 @@ export const issueCreditCard = async (req: Request, res: Response) => {
   }
 };
 
-// 2. Renew a credit card (update exp date and cvv)
 export const renewCreditCard = async (req: Request, res: Response) => {
   const { card_number } = req.params;
   try {
@@ -97,7 +100,6 @@ export const renewCreditCard = async (req: Request, res: Response) => {
   }
 };
 
-// 3. Pay credit card
 export const payCreditCard = async (req: Request, res: Response) => {
   const user_id = req.user.user_id;
   const { card_number } = req.params;
@@ -105,15 +107,12 @@ export const payCreditCard = async (req: Request, res: Response) => {
   if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
 
   try {
-    // Get the card and ensure it belongs to user
     const card = (await pool.query("SELECT * FROM credit_card WHERE card_number = $1 AND user_id = $2", [card_number, user_id])).rows[0];
     if (!card) return res.status(404).json({ error: "Credit card not found" });
 
-    // Pick selected or default bank account
     const account = await getUserBankAccount(user_id, bank_account_id || card.bank_account_id);
     if (!account) return res.status(400).json({ error: "No valid bank account found." });
 
-    // Check sufficient funds
     if (account.balance < amount) return res.status(400).json({ error: "Not enough funds in account." });
 
     // Perform transaction as an atomic update (with SQL transaction for concurrency safety)
@@ -134,9 +133,7 @@ export const payCreditCard = async (req: Request, res: Response) => {
   }
 };
 
-// 4. Authorization endpoint (stateless, GET with params, returns JSON/XML)
 export const authorizeTransaction = async (req: Request, res: Response) => {
-  // Accept params via query string
   const {
     tarjeta, // card_number
     nombre, // cardholder_name
@@ -147,7 +144,6 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     formato, // 'JSON' or 'XML'
   } = req.query;
 
-  // 1. Validate input
   if (!tarjeta || !nombre || !fecha_venc || !num_seguridad || !monto || !tienda)
     return res.status(400).json({ error: "Missing required params" });
 
@@ -158,10 +154,8 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
   let status = "INCOMPLETE";
 
   try {
-    // Open SQL transaction for concurrency safety
     await pool.query("BEGIN");
 
-    // 2. Find and lock credit card row
     const result = await pool.query(
       `SELECT * FROM credit_card WHERE card_number = $1 FOR UPDATE`,
       [tarjeta]
@@ -182,11 +176,9 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     } else {
       status = "APPROVED";
       auth_status = "APROBADO";
-      // Autogenerate number (just a random 6 digits)
       numero_autorizacion = Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    // 3. Create transaction record with appropriate status
     const trResult = await pool.query(
       `INSERT INTO card_transaction (card_number, type, amount, status, description, store, authorization_id)
        VALUES ($1, 'PURCHASE', $2, $3, $4, $5, NULL) RETURNING transaction_id`,
@@ -194,7 +186,6 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     );
     transaction_id = trResult.rows[0]?.transaction_id;
 
-    // 4. If approved, update credit card balance
     if (status === "APPROVED") {
       await pool.query(
         "UPDATE credit_card SET available_credit = available_credit - $1 WHERE card_number = $2",
@@ -228,8 +219,71 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
   }
 };
 
+export const updateCreditCard = async (req: Request, res: Response) => {
+  const { card_number } = req.params;
+  const { expiration_date, credit_limit, available_credit, cut_date, due_date, interest } = req.body;
+  try {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (expiration_date) { fields.push(`expiration_date = $${idx++}`); values.push(expiration_date); }
+    if (credit_limit)     { fields.push(`credit_limit = $${idx++}`); values.push(credit_limit); }
+    if (available_credit) { fields.push(`available_credit = $${idx++}`); values.push(available_credit); }
+    if (cut_date)         { fields.push(`cut_date = $${idx++}`); values.push(cut_date); }
+    if (due_date)         { fields.push(`due_date = $${idx++}`); values.push(due_date); }
+    if (interest)         { fields.push(`interest = $${idx++}`); values.push(interest); }
+    if (fields.length === 0) return res.status(400).json({ error: "No fields provided to update" });
+
+    values.push(card_number);
+
+    const result = await pool.query(
+      `UPDATE credit_card SET ${fields.join(', ')} WHERE card_number = $${idx} RETURNING *`,
+      values
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: "Card not found" });
+    const format = chooseFormat(req);
+    sendFormatted(res, result.rows[0], format, "credit_card");
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const updateCreditCardStatus = async (req: Request, res: Response) => {
+  const { card_number } = req.params;
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: "No status provided" });
+  try {
+    const result = await pool.query(
+      `UPDATE credit_card SET status = $1 WHERE card_number = $2 RETURNING *`,
+      [status, card_number]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: "Card not found" });
+    const format = chooseFormat(req);
+    sendFormatted(res, result.rows[0], format, "credit_card");
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
 // Helper to get today in yyyymm format
 function getTodayYearMonth() {
   const d = new Date();
   return d.getFullYear().toString() + (d.getMonth() + 1).toString().padStart(2, "0");
 }
+
+export const softDeleteCreditCard = async (req: Request, res: Response) => {
+  const { card_number } = req.params;
+  try {
+    const result = await pool.query(
+      "UPDATE credit_card SET status = 'deleted' WHERE card_number = $1 RETURNING *",
+      [card_number]
+    );
+    if (result.rowCount === 0)
+      return res.status(404).json({ error: "Credit card not found" });
+    sendFormatted(res, result.rows[0], chooseFormat(req), "credit_card");
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};

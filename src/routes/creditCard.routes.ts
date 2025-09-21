@@ -5,6 +5,9 @@ import {
   renewCreditCard,
   payCreditCard,
   authorizeTransaction,
+  updateCreditCard,
+  updateCreditCardStatus,
+  softDeleteCreditCard,
 } from "../controllers/creditCard.controller.ts";
 import { authMiddleware } from "../middlewares/auth.ts";
 
@@ -13,16 +16,16 @@ const router = Router();
 /**
  * @swagger
  * tags:
- *   name: CreditCards
- *   description: Credit card management & transactions
+ *   name: TarjetaCredito
+ *   description: Mantenimiento Tarjetas de Credito y Transacciones
  */
 
 /**
  * @swagger
- * /api/credit-cards/issue:
+ * /api/tarjeta-credito/emitir:
  *   post:
- *     summary: Give a credit card to the user
- *     tags: [CreditCards]
+ *     summary: Generar Tarjeta de Credito al usuario
+ *     tags: [TarjetaCredito]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -51,50 +54,50 @@ const router = Router();
  *                 type: string
  *     responses:
  *       200:
- *         description: Credit card issued
+ *         description: Tarjeta de credito emitida
  *       400:
  *         description: Error
  */
-router.post("/issue", authMiddleware, issueCreditCard);
+router.post("/emitir", authMiddleware, issueCreditCard);
 
 /**
  * @swagger
- * /api/credit-cards/{card_number}/renew:
+ * /api/tarjeta-credito/{tarjeta_numero}/renovar:
  *   put:
- *     summary: Renew credit card (new exp date and cvv)
- *     tags: [CreditCards]
+ *     summary: Renueva Tarjeta de Credito (nueva fecha de vencimiento y cvv)
+ *     tags: [TarjetaCredito]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: card_number
+ *         name: tarjeta_numero
  *         schema:
  *           type: string
  *         required: true
- *         description: Credit card number
+ *         description: Numero de Tarjeta de Credito
  *     responses:
  *       200:
- *         description: Credit card renewed
+ *         description: Tarjeta de Credito Renovada
  *       404:
- *         description: Not found
+ *         description: No Encontrado
  */
-router.put("/:card_number/renew", authMiddleware, renewCreditCard);
+router.put("/:tarjeta_numero/renovar", authMiddleware, renewCreditCard);
 
 /**
  * @swagger
- * /api/credit-cards/{card_number}/pay:
+ * /api/tarjeta-credito/{tarjeta_numero}/pagar:
  *   post:
- *     summary: Pay credit card
- *     tags: [CreditCards]
+ *     summary: Pagar Tarjeta Credito
+ *     tags: [TarjetaCredito]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: card_number
+ *         name: tarjeta_numero
  *         schema:
  *           type: string
  *         required: true
- *         description: Credit card number
+ *         description: Numero Tarjeta de Credito
  *     requestBody:
  *       required: true
  *       content:
@@ -108,67 +111,116 @@ router.put("/:card_number/renew", authMiddleware, renewCreditCard);
  *                 type: integer
  *     responses:
  *       200:
- *         description: Payment successful
+ *         description: Pago Exitoso
  *       400:
  *         description: Error
  */
-router.post("/:card_number/pay", authMiddleware, payCreditCard);
+router.post("/:tarjeta_numero/pagar", authMiddleware, payCreditCard);
 
 /**
  * @swagger
- * /api/credit-cards/authorization:
- *   get:
- *     summary: Authorize a credit card transaction (consumption)
- *     tags: [CreditCards]
+ * /api/tarjeta-credito/{tarjeta_numero}:
+ *   patch:
+ *     summary: Actualizar Datos Tarjeta Credito (exp date, limite, etc)
+ *     tags: [TarjetaCredito]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: tarjeta
+ *       - in: path
+ *         name: tarjeta_numero
+ *         required: true
  *         schema:
  *           type: string
- *         required: true
- *         description: Credit card number
- *       - in: query
- *         name: nombre
- *         schema:
- *           type: string
- *         required: true
- *         description: Cardholder name
- *       - in: query
- *         name: fecha_venc
- *         schema:
- *           type: string
- *         required: true
- *         description: Expiration date (yyyymm)
- *       - in: query
- *         name: num_seguridad
- *         schema:
- *           type: string
- *         required: true
- *         description: CVV
- *       - in: query
- *         name: monto
- *         schema:
- *           type: number
- *         required: true
- *         description: Amount
- *       - in: query
- *         name: tienda
- *         schema:
- *           type: string
- *         required: true
- *         description: Store
- *       - in: query
- *         name: formato
- *         schema:
- *           type: string
- *         required: false
- *         description: "Format: JSON or XML"
+ *         description: Numero Tarjeta de Credito
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               expiration_date:
+ *                 type: string
+ *               credit_limit:
+ *                 type: number
+ *               available_credit:
+ *                 type: number
+ *               cut_date:
+ *                 type: string
+ *               due_date:
+ *                 type: string
+ *               interest:
+ *                 type: number
  *     responses:
  *       200:
- *         description: Authorization response (JSON or XML)
- *       400:
- *         description: Error
+ *         description: Tarjeta actualizada
+ *       404:
+ *         description: No Encontrada
  */
-router.get("/authorization", authorizeTransaction);
+router.patch("/:tarjeta_numero", authMiddleware, updateCreditCard);
+
+/**
+ * @swagger
+ * /api/tarjeta-credito/{tarjeta_numero}/status:
+ *   patch:
+ *     summary: Modificar Estado Tarjeta Credito (active, blocked, lost, etc)
+ *     tags: [TarjetaCredito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tarjeta_numero
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Numero Tarjeta de Credito
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status Modificado
+ *       404:
+ *         description: No Encontrada
+ */
+router.patch("/:tarjeta_numero/status", authMiddleware, updateCreditCardStatus);
+
+/**
+ * @swagger
+ * /api/tarjeta-credito/{card_number}:
+ *   delete:
+ *     summary: Eliminar Tarjeta de Crédito (soft delete)
+ *     tags: [TarjetaCredito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: card_number
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Número de tarjeta de crédito (16 dígitos)
+ *     responses:
+ *       200:
+ *         description: Tarjeta marcada como eliminada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CreditCard'
+ *       404:
+ *         description: Tarjeta no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.delete("/:card_number", authMiddleware, softDeleteCreditCard);
 
 export default router;

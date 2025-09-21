@@ -1,6 +1,7 @@
-// src/routes/bank.routes.ts
 import { Router } from "express";
 import { createBank, getBanks, updateBank, deleteBank } from "../controllers/bank.controller.ts";
+
+const router = Router();
 
 /**
  * @swagger
@@ -9,7 +10,27 @@ import { createBank, getBanks, updateBank, deleteBank } from "../controllers/ban
  *   description: Manejo de Bancos
  */
 
-const router = Router();
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Banco:
+ *       type: object
+ *       properties:
+ *         bank_id:
+ *           type: integer
+ *         name:
+ *           type: string
+ *         bank_code:
+ *           type: string
+ *         host:
+ *           type: string
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ */
 
 /**
  * @swagger
@@ -33,7 +54,17 @@ const router = Router();
  *                 type: string
  *     responses:
  *       201:
- *         description: Bank created
+ *         description: Banco creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Banco'
+ *       500:
+ *         description: Error en el servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post("/", createBank);
 
@@ -45,7 +76,19 @@ router.post("/", createBank);
  *     tags: [Bancos]
  *     responses:
  *       200:
- *         description: List of banks
+ *         description: Listado de bancos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Banco'
+ *       500:
+ *         description: Error en el servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/", getBanks);
 
@@ -77,9 +120,23 @@ router.get("/", getBanks);
  *                 type: string
  *     responses:
  *       200:
- *         description: Bank updated
+ *         description: Banco modificado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Banco'
  *       404:
- *         description: Bank not found
+ *         description: Banco no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Error en el servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.put("/:id", updateBank);
 
@@ -98,9 +155,28 @@ router.put("/:id", updateBank);
  *         description: Bank ID
  *     responses:
  *       200:
- *         description: Bank deleted
+ *         description: Banco borrado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 bank:
+ *                   $ref: '#/components/schemas/Banco'
  *       404:
- *         description: Bank not found
+ *         description: Banco no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Error en el servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete("/:id", deleteBank);
 

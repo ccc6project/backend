@@ -7,12 +7,44 @@ const router = Router();
  * @swagger
  * tags:
  *   name: Usuarios
- *   description: Manejo de usuarios y autenticacion
+ *   description: Manejo de usuarios y autenticación
  */
 
 /**
  * @swagger
- * /api/usuarios/register:
+ * components:
+ *   schemas:
+ *     Usuario:
+ *       type: object
+ *       properties:
+ *         user_id:
+ *           type: integer
+ *         name:
+ *           type: string
+ *         email:
+ *           type: string
+ *         document_type:
+ *           type: string
+ *         document_number:
+ *           type: string
+ *     LoginResponse:
+ *       type: object
+ *       properties:
+ *         user:
+ *           $ref: '#/components/schemas/Usuario'
+ *         token:
+ *           type: string
+ *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ */
+
+/**
+ * @swagger
+ * /api/usuarios/signup:
  *   post:
  *     summary: Registrar nuevo usuario
  *     tags: [Usuarios]
@@ -41,11 +73,19 @@ const router = Router();
  *                 type: string
  *     responses:
  *       200:
- *         description: Usuario Registrado Exitosamente
+ *         description: Usuario registrado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Usuario'
  *       500:
- *         description: Server error
+ *         description: Error en el servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/signup", createUser);   // POST /api/usuarios/register
+router.post("/signup", createUser);
 
 /**
  * @swagger
@@ -69,34 +109,65 @@ router.post("/signup", createUser);   // POST /api/usuarios/register
  *                 type: string
  *     responses:
  *       200:
- *         description: Login Exitoso
+ *         description: Login exitoso, retorna usuario y token JWT
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *             example:
+ *               user:
+ *                 user_id: 3
+ *                 name: "Juan Perez"
+ *                 email: "juan@demo.com"
+ *                 document_type: "DPI"
+ *                 document_number: "1234567"
+ *               token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *       401:
- *         description: Email or Contrasena invalida
+ *         description: Email o contraseña inválida
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/login", loginUser);       // POST /api/usuarios/login
+router.post("/login", loginUser);
 
 /**
  * @swagger
  * /api/usuarios/logout:
  *   post:
- *     summary: Logout, delete JWT
+ *     summary: Logout, elimina el JWT del cliente
  *     tags: [Usuarios]
  *     responses:
  *       200:
- *         description: Logged out
+ *         description: Sesión cerrada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *               example:
+ *                 message: "Logged out"
  */
-router.post("/logout", logoutUser);     // POST /api/usuarios/logout
+router.post("/logout", logoutUser);
 
 /**
  * @swagger
  * /api/usuarios:
  *   get:
- *     summary: Mostrar todo los usuarios
+ *     summary: Obtener lista de todos los usuarios
  *     tags: [Usuarios]
  *     responses:
  *       200:
  *         description: Lista de usuarios
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Usuario'
  */
-router.get("/", getAllUsers);           // GET /api/usuarios
+router.get("/", getAllUsers);
 
 export default router;

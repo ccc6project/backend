@@ -7,6 +7,7 @@ import { specs, swaggerUi } from "./config/swagger.ts";
 import bankRoutes from "./routes/bank.routes.ts";
 import bankAccountRoutes from "./routes/bankAccount.routes.ts";
 import creditCardRoutes from "./routes/creditCard.routes.ts";
+import authorizationRoutes from "./routes/authorization.routes.ts";
 
 dotenv.config();
 
@@ -20,7 +21,8 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
 app.use("/api/usuarios", userRoutes);
 app.use("/api/bancos", bankRoutes);
-app.use("/api/bank-accounts", bankAccountRoutes);
-app.use("/api/credit-cards", creditCardRoutes);
+app.use("/api/cuentas-banco", bankAccountRoutes);
+app.use("/api/tarjeta-credito", creditCardRoutes);
+app.use("/authorization", authorizationRoutes);
 
 export default app;
