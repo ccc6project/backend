@@ -3,9 +3,9 @@ services:
     image: postgres:16
     container_name: my_postgres
     environment:
-      POSTGRES_PASSWORD: "o1234"
+      POSTGRES_PASSWORD: "1234"
     ports:
-      - "4321:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
