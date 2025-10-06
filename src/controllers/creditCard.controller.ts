@@ -266,6 +266,20 @@ export const updateCreditCardStatus = async (req: Request, res: Response) => {
   }
 };
 
+// Lista todas las tarjetas del usuario autenticado
+export const listUserCreditCards = async (req: any, res: Response) => {
+  const user_id = req.user.user_id;
+  try {
+    const result = await pool.query(
+      "SELECT * FROM credit_card WHERE user_id = $1 AND status != 'deleted' ORDER BY expiration_date DESC",
+      [user_id]
+    );
+    const format = chooseFormat(req);
+    sendFormatted(res, result.rows, format, "credit_cards");
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 // Helper to get today in yyyymm format
 function getTodayYearMonth() {

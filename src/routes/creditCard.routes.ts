@@ -8,6 +8,7 @@ import {
   updateCreditCard,
   updateCreditCardStatus,
   softDeleteCreditCard,
+  listUserCreditCards,
 } from "../controllers/creditCard.controller.ts";
 import { authMiddleware } from "../middlewares/auth.ts";
 
@@ -222,5 +223,31 @@ router.patch("/:tarjeta_numero/status", authMiddleware, updateCreditCardStatus);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete("/:card_number", authMiddleware, softDeleteCreditCard);
+
+/**
+ * @swagger
+ * /api/tarjeta-credito:
+ *   get:
+ *     summary: Listar tarjetas de credito del usuario autenticado
+ *     tags: [TarjetaCredito]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de tarjetas de credito activas (no eliminadas) del usuario
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CreditCard'
+ *       401:
+ *         description: No autorizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get("/", authMiddleware, listUserCreditCards);
 
 export default router;
