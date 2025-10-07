@@ -37,10 +37,6 @@ export const issueCreditCard = async (req: Request, res: Response) => {
     // Validaciones formato
     if (expiration_date && !validateExpDate(expiration_date))
       return res.status(400).json({ error: "Formato de fecha de vencimiento incorrecto (yyyymm)" });
-    if (cut_date)
-      return res.status(400).json({ error: "Formato de fecha de corte incorrecto (yyyymmdd)" });
-    if (due_date)
-      return res.status(400).json({ error: "Formato de fecha de pago incorrecto (yyyymmdd)" });
     if (emisor_id && emisor_id.length !== 15)
       return res.status(400).json({ error: "El emisor debe tener 15 caracteres" });
 
