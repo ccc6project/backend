@@ -4,6 +4,78 @@ import { pool } from "../../db/connection.ts";
 import { generateCardNumber, generateCVV, generateExpiration, validateDateYMD, validateExpDate } from "../utils/creditCardGenerator.ts";
 import { chooseFormat, sendFormatted } from "../utils/ResponseFormat.ts";
 
+// Motivos estandarizados (mantener en inglés para datos, pero describe en español al usuario si quieres)
+type DeniedReason =
+  | "CARD_NOT_FOUND"
+  | "CARD_INACTIVE"
+  | "EXPIRED_CARD"
+  | "INVALID_EXPIRY_FORMAT"
+  | "INVALID_CVV"
+  | "NAME_MISMATCH"
+  | "OVER_LIMIT"
+  | "INSUFFICIENT_FUNDS"
+  | "DUPLICATE"
+  | "VELOCITY_LIMIT"
+  | "MERCHANT_BLOCKED"
+  | "CURRENCY_BLOCKED"
+  | "SYSTEM_ERROR";
+
+const DENIAL_MESSAGES: Record<DeniedReason, string> = {
+  CARD_NOT_FOUND: "Tarjeta no encontrada.",
+  CARD_INACTIVE: "Tarjeta inactiva o bloqueada.",
+  EXPIRED_CARD: "La tarjeta está vencida.",
+  INVALID_EXPIRY_FORMAT: "Formato de fecha de vencimiento inválido.",
+  INVALID_CVV: "Código de seguridad incorrecto.",
+  NAME_MISMATCH: "Nombre del tarjeta-habiente no coincide.",
+  OVER_LIMIT: "La operación excede el límite de crédito.",
+  INSUFFICIENT_FUNDS: "Fondos/Crédito disponible insuficiente.",
+  DUPLICATE: "Transacción duplicada detectada.",
+  VELOCITY_LIMIT: "Límite de frecuencia de transacciones excedido.",
+  MERCHANT_BLOCKED: "Comercio no permitido para esta tarjeta.",
+  CURRENCY_BLOCKED: "Moneda/combinación no permitida.",
+  SYSTEM_ERROR: "Error interno al procesar la transacción."
+};
+
+// Normaliza nombre para comparación suave
+function normalizeName(s: string) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+// Anti-duplicados: misma tarjeta+monto+tienda en los últimos N segundos
+async function isDuplicateTxn(card_number: string, amount: number, store: string, seconds = 60) {
+  const r = await pool.query(
+    `SELECT 1
+       FROM card_transaction
+      WHERE card_number = $1
+        AND type = 'PURCHASE'
+        AND status = 'APPROVED'
+        AND amount = $2
+        AND store = $3
+        AND "timestamp" >= NOW() - INTERVAL '${seconds} seconds'
+      LIMIT 1`,
+    [card_number, amount, store]
+  );
+  return r.rowCount! > 0;
+}
+
+// Velocity: más de K compras aprobadas en los últimos M minutos
+async function exceedsVelocity(card_number: string, k = 5, minutes = 1) {
+  const r = await pool.query(
+    `SELECT count(*)::int AS n
+       FROM card_transaction
+      WHERE card_number = $1
+        AND type = 'PURCHASE'
+        AND status = 'APPROVED'
+        AND "timestamp" >= NOW() - INTERVAL '${minutes} minutes'`,
+    [card_number]
+  );
+  return (r.rows[0]?.n ?? 0) >= k;
+}
+
+
 // ✅ Extender la interfaz Request para incluir user
 declare global {
   namespace Express {
@@ -117,15 +189,15 @@ export const getCardTransactions = async (req: Request, res: Response) => {
       "SELECT * FROM credit_card WHERE card_number = $1 AND user_id = $2",
       [card_number, user_id]
     );
-    
+
     if (cardResult.rowCount === 0) {
       return res.status(404).json({ error: "Tarjeta no encontrada" });
     }
 
     const transactions = await pool.query(
-      `SELECT * FROM card_transaction 
-       WHERE card_number = $1 
-       ORDER BY timestamp DESC 
+      `SELECT * FROM card_transaction
+       WHERE card_number = $1
+       ORDER BY timestamp DESC
        LIMIT 50`,
       [card_number]
     );
@@ -155,7 +227,7 @@ export const getCardStatement = async (req: Request, res: Response) => {
       "SELECT * FROM credit_card WHERE card_number = $1 AND user_id = $2",
       [card_number, user_id]
     );
-    
+
     console.log('📋 Card query result:', cardResult.rows[0]);
 
     if (cardResult.rowCount === 0) {
@@ -163,7 +235,7 @@ export const getCardStatement = async (req: Request, res: Response) => {
     }
 
     const card = cardResult.rows[0];
-    
+
     // ✅ FORMA MEJORADA: Manejo robusto de fechas
     const now = new Date();
     let usePeriod: string;
@@ -175,7 +247,7 @@ export const getCardStatement = async (req: Request, res: Response) => {
       usePeriod = period;
       const year = parseInt(period.slice(0, 4));
       const month = parseInt(period.slice(4, 6));
-      
+
       startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();
       endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay}`;
@@ -184,7 +256,7 @@ export const getCardStatement = async (req: Request, res: Response) => {
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
       usePeriod = `${year}${month.toString().padStart(2, '0')}`;
-      
+
       startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();
       endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay}`;
@@ -194,14 +266,14 @@ export const getCardStatement = async (req: Request, res: Response) => {
 
     // ✅ TEMPORAL: Para testing, quitar filtro de fechas
     const transactions = await pool.query(
-      `SELECT * FROM card_transaction 
-       WHERE card_number = $1 
+      `SELECT * FROM card_transaction
+       WHERE card_number = $1
        ORDER BY timestamp DESC`,
       [card_number]
     );
 
     console.log('💳 Transactions found:', transactions.rows.length);
-    
+
     // Mostrar las fechas de las transacciones para debug
     transactions.rows.forEach((t: any, index: number) => {
       console.log(`Transacción ${index + 1}:`, {
@@ -258,14 +330,14 @@ export const renewCreditCard = async (req: Request, res: Response) => {
   try {
     const card = (await pool.query("SELECT * FROM credit_card WHERE card_number = $1", [card_number])).rows[0];
     if (!card) return res.status(404).json({ error: "Credit card not found" });
-    
+
     const newExp = generateExpiration();
     const newCVV = generateCVV();
     const result = await pool.query(
       "UPDATE credit_card SET expiration_date = $1, security_code = $2 WHERE card_number = $3 RETURNING *",
       [newExp, newCVV, card_number]
     );
-    
+
     const format = chooseFormat(req);
     sendFormatted(res, result.rows[0], format, "credit_card");
   } catch (err: any) {
@@ -281,7 +353,7 @@ export const payCreditCard = async (req: Request, res: Response) => {
   const user_id = req.user.user_id;
   const { card_number } = req.params;
   const { amount, bank_account_id } = req.body;
-  
+
   console.log('🔍 DEBUG PAYMENT - Iniciando');
   console.log('Card number:', card_number);
   console.log('User ID:', user_id);
@@ -292,10 +364,10 @@ export const payCreditCard = async (req: Request, res: Response) => {
 
   try {
     const cardResult = await pool.query(
-      "SELECT * FROM credit_card WHERE card_number = $1 AND user_id = $2", 
+      "SELECT * FROM credit_card WHERE card_number = $1 AND user_id = $2",
       [card_number, user_id]
     );
-    
+
     console.log('📋 Card query result:', cardResult.rows[0]);
     console.log('📊 Cards found:', cardResult.rowCount);
 
@@ -317,16 +389,16 @@ export const payCreditCard = async (req: Request, res: Response) => {
     await pool.query("BEGIN");
     await pool.query("UPDATE bank_account SET balance = balance - $1 WHERE account_id = $2", [amount, account.account_id]);
     await pool.query("UPDATE credit_card SET available_credit = available_credit + $1 WHERE card_number = $2", [amount, card_number]);
-    
+
     // ✅ CORREGIDO: Para PAGOS, no incluir store o usar un valor por defecto
     await pool.query(
       `INSERT INTO card_transaction (card_number, type, amount, status, source_account_id, description, store)
        VALUES ($1, 'PAYMENT', $2, 'APPROVED', $3, $4, $5)`,
       [card_number, amount, account.account_id, "Payment to credit card", "Pago de tarjeta"] // ← Agregar store con valor por defecto
     );
-    
+
     await pool.query("COMMIT");
-    
+
     console.log('✅ Payment successful');
     res.json({ message: "Payment successful" });
   } catch (err: any) {
@@ -365,7 +437,122 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
       [tarjeta]
     );
     const card = result.rows[0];
-    
+
+    const storeValue = (tienda as string) || "Tienda Desconocida";
+    const amount = Number(monto);
+    const todayYM = getTodayYearMonth();
+
+    // 1) no encontrada
+    if (!card) {
+      const reason: DeniedReason = "CARD_NOT_FOUND";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+        [card.card_number, amount, reason, storeValue]
+      );
+      return res.status(403).json({ status: "DENIED", denied_reason: reason });
+    }
+
+    // 2) estado inactivo/bloqueado
+    if (card.status && card.status !== "active") {
+      const reason: DeniedReason = "CARD_INACTIVE";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+        [card.card_number, amount, reason, storeValue]
+      );
+      return res.status(403).json({ status: "DENIED", denied_reason: reason });
+    }
+
+    // 3) formato de vencimiento
+    if (!validateExpDate(String(fecha_venc))) {
+      const reason: DeniedReason = "INVALID_EXPIRY_FORMAT";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+        [card.card_number, amount, reason, storeValue]
+      );
+      return res.status(403).json({ status: "DENIED", denied_reason: reason });
+    }
+
+    // 4) tarjeta vencida
+    if (String(fecha_venc) < todayYM || String(card.expiration_date) < todayYM) {
+      const reason: DeniedReason = "EXPIRED_CARD";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+        [card.card_number, amount, reason, storeValue]
+      );
+      return res.status(403).json({ status: "DENIED", denied_reason: reason });
+    }
+
+    // 5) CVV
+    if (String(num_seguridad) !== String(card.cvv)) {
+      const reason: DeniedReason = "INVALID_CVV";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+        [card.card_number, amount, reason, storeValue]
+      );
+      return res.status(403).json({ status: "DENIED", denied_reason: reason });
+    }
+
+    // 6) Nombre (comparación suave; si no quieres forzar, comenta este bloque)
+    if (normalizeName(nombre as string) && normalizeName(card.cardholder_name)) {
+      if (normalizeName(nombre as string) !== normalizeName(card.cardholder_name)) {
+        const reason: DeniedReason = "NAME_MISMATCH";
+        await pool.query(
+          `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+          VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+          [card.card_number, amount, reason, storeValue]
+        );
+        return res.status(403).json({ status: "DENIED", denied_reason: reason });
+      }
+    }
+
+    // 7) Duplicada (mismo monto+tienda en últimos 60s)
+    if (await isDuplicateTxn(card.card_number, amount, storeValue, 60)) {
+      const reason: DeniedReason = "DUPLICATE";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
+        [card.card_number, amount, reason, storeValue]
+      );
+      return res.status(403).json({ status: "DENIED", denied_reason: reason });
+    }
+
+    // 8) Velocity (>=5 aprobadas en el último minuto)
+    if (await exceedsVelocity(card.card_number, 5, 1)) {
+      const reason: DeniedReason = "VELOCITY_LIMIT";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, description, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4, $5)`,
+        [card.card_number, amount, reason, DENIAL_MESSAGES[reason], storeValue]
+      );
+      return res.status(429).json({ status: "DENIED", denied_reason: reason, message: DENIAL_MESSAGES[reason] });
+    }
+
+    // 9) Límites y fondos
+    const currentBalance = Number(card.credit_limit) - Number(card.available_credit);
+    if (currentBalance + amount > Number(card.credit_limit)) {
+      const reason: DeniedReason = "OVER_LIMIT";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, description, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4, $5)`,
+        [card.card_number, amount, reason, DENIAL_MESSAGES[reason], storeValue]
+      );
+      return res.status(402).json({ status: "DENIED", denied_reason: reason, message: DENIAL_MESSAGES[reason] });
+    }
+    if (Number(card.available_credit) < amount) {
+      const reason: DeniedReason = "INSUFFICIENT_FUNDS";
+      await pool.query(
+        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, description, store)
+        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4, $5)`,
+        [card.card_number, amount, reason, DENIAL_MESSAGES[reason], storeValue]
+      );
+      return res.status(402).json({ status: "DENIED", denied_reason: reason, message: DENIAL_MESSAGES[reason] });
+    }
+
     if (!card) {
       status = "DENIED";
     } else if (
@@ -386,11 +573,11 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     }
 
     // ✅ CORREGIDO: Asegurar que store tenga un valor
-    const storeValue = tienda || "Tienda Online"; // ← Valor por defecto
-    
+    // const storeValue = tienda || "Tienda Online"; // ← Valor por defecto
+
     const trResult = await pool.query(
-      `INSERT INTO card_transaction (card_number, type, amount, status, description, store, authorization_id)
-       VALUES ($1, 'PURCHASE', $2, $3, $4, $5, NULL) RETURNING transaction_id`,
+      `INSERT INTO card_transaction (card_number, type, amount, status, description, store, denied_reason, authorization_id)
+       VALUES ($1, 'PURCHASE', $2, $3, $4, $5, NULL, NULL) RETURNING transaction_id`,
       [tarjeta, monto, status, `Compra en ${storeValue}`, storeValue] // ← Usar storeValue en ambos lugares
     );
 
@@ -411,9 +598,9 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
       status: auth_status,
       numero: numero_autorizacion,
     };
-    
-    const formatValue = formato 
-      ? (String(formato).toLowerCase() as 'json' | 'xml') 
+
+    const formatValue = formato
+      ? (String(formato).toLowerCase() as 'json' | 'xml')
       : chooseFormat(req);
     sendFormatted(res, response, formatValue, "autorizacion");
   } catch (err: any) {
@@ -434,7 +621,7 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
 export const updateCreditCard = async (req: Request, res: Response) => {
   const { card_number } = req.params;
   const { expiration_date, credit_limit, available_credit, cut_date, due_date, interest } = req.body;
-  
+
   try {
     const fields = [];
     const values = [];
@@ -446,7 +633,7 @@ export const updateCreditCard = async (req: Request, res: Response) => {
     if (cut_date)         { fields.push(`cut_date = $${idx++}`); values.push(cut_date); }
     if (due_date)         { fields.push(`due_date = $${idx++}`); values.push(due_date); }
     if (interest)         { fields.push(`interest = $${idx++}`); values.push(interest); }
-    
+
     if (fields.length === 0) return res.status(400).json({ error: "No fields provided to update" });
 
     values.push(card_number);
@@ -455,9 +642,9 @@ export const updateCreditCard = async (req: Request, res: Response) => {
       `UPDATE credit_card SET ${fields.join(', ')} WHERE card_number = $${idx} RETURNING *`,
       values
     );
-    
+
     if (result.rowCount === 0) return res.status(404).json({ error: "Card not found" });
-    
+
     const format = chooseFormat(req);
     sendFormatted(res, result.rows[0], format, "credit_card");
   } catch (err: any) {
@@ -468,17 +655,17 @@ export const updateCreditCard = async (req: Request, res: Response) => {
 export const updateCreditCardStatus = async (req: Request, res: Response) => {
   const { card_number } = req.params;
   const { status } = req.body;
-  
+
   if (!status) return res.status(400).json({ error: "No status provided" });
-  
+
   try {
     const result = await pool.query(
       `UPDATE credit_card SET status = $1 WHERE card_number = $2 RETURNING *`,
       [status, card_number]
     );
-    
+
     if (result.rowCount === 0) return res.status(404).json({ error: "Card not found" });
-    
+
     const format = chooseFormat(req);
     sendFormatted(res, result.rows[0], format, "credit_card");
   } catch (err: any) {
@@ -512,10 +699,10 @@ export const softDeleteCreditCard = async (req: Request, res: Response) => {
       "UPDATE credit_card SET status = 'deleted' WHERE card_number = $1 RETURNING *",
       [card_number]
     );
-    
+
     if (result.rowCount === 0)
       return res.status(404).json({ error: "Credit card not found" });
-    
+
     sendFormatted(res, result.rows[0], chooseFormat(req), "credit_card");
   } catch (err: any) {
     res.status(500).json({ error: err.message });
