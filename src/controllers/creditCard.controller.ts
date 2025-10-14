@@ -20,22 +20,6 @@ type DeniedReason =
   | "CURRENCY_BLOCKED"
   | "SYSTEM_ERROR";
 
-const DENIAL_MESSAGES: Record<DeniedReason, string> = {
-  CARD_NOT_FOUND: "Tarjeta no encontrada.",
-  CARD_INACTIVE: "Tarjeta inactiva o bloqueada.",
-  EXPIRED_CARD: "La tarjeta está vencida.",
-  INVALID_EXPIRY_FORMAT: "Formato de fecha de vencimiento inválido.",
-  INVALID_CVV: "Código de seguridad incorrecto.",
-  NAME_MISMATCH: "Nombre del tarjeta-habiente no coincide.",
-  OVER_LIMIT: "La operación excede el límite de crédito.",
-  INSUFFICIENT_FUNDS: "Fondos/Crédito disponible insuficiente.",
-  DUPLICATE: "Transacción duplicada detectada.",
-  VELOCITY_LIMIT: "Límite de frecuencia de transacciones excedido.",
-  MERCHANT_BLOCKED: "Comercio no permitido para esta tarjeta.",
-  CURRENCY_BLOCKED: "Moneda/combinación no permitida.",
-  SYSTEM_ERROR: "Error interno al procesar la transacción."
-};
-
 // Normaliza nombre para comparación suave
 function normalizeName(s: string) {
   return String(s || "")
@@ -408,6 +392,12 @@ export const payCreditCard = async (req: Request, res: Response) => {
   }
 };
 
+// Helpers bien simples
+function genAuthNumber(): string {
+  // 6 dígitos, o cambia a lo que uses (p.e. secuencia DB)
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export const authorizeTransaction = async (req: Request, res: Response) => {
   const {
     tarjeta,
@@ -425,9 +415,9 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
   if (!tarjeta || !nombre || !fecha_venc || !num_seguridad || !monto || !tienda)
     return res.status(400).json({ error: "Missing required params" });
 
-  let auth_status = "DENEGADO";
-  let numero_autorizacion = "0";
-  let status = "INCOMPLETE";
+  // let auth_status = "DENEGADO";
+  // let numero_autorizacion = "0";
+  // let status = "INCOMPLETE";
 
   try {
     await pool.query("BEGIN");
@@ -438,151 +428,66 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     );
     const card = result.rows[0];
 
-    const storeValue = (tienda as string) || "Tienda Desconocida";
-    const amount = Number(monto);
-    const todayYM = getTodayYearMonth();
+    let auth_status = "DENEGADO";
+    let numero_autorizacion = "0";
+    let status: "APPROVED" | "DENIED" | "INCOMPLETE" = "INCOMPLETE";
+    let denied_reason: string | null = null;
 
-    // 1) no encontrada
-    if (!card) {
-      const reason: DeniedReason = "CARD_NOT_FOUND";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-        [card.card_number, amount, reason, storeValue]
-      );
-      return res.status(403).json({ status: "DENIED", denied_reason: reason });
-    }
-
-    // 2) estado inactivo/bloqueado
-    if (card.status && card.status !== "active") {
-      const reason: DeniedReason = "CARD_INACTIVE";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-        [card.card_number, amount, reason, storeValue]
-      );
-      return res.status(403).json({ status: "DENIED", denied_reason: reason });
-    }
-
-    // 3) formato de vencimiento
-    if (!validateExpDate(String(fecha_venc))) {
-      const reason: DeniedReason = "INVALID_EXPIRY_FORMAT";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-        [card.card_number, amount, reason, storeValue]
-      );
-      return res.status(403).json({ status: "DENIED", denied_reason: reason });
-    }
-
-    // 4) tarjeta vencida
-    if (String(fecha_venc) < todayYM || String(card.expiration_date) < todayYM) {
-      const reason: DeniedReason = "EXPIRED_CARD";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-        [card.card_number, amount, reason, storeValue]
-      );
-      return res.status(403).json({ status: "DENIED", denied_reason: reason });
-    }
-
-    // 5) CVV
-    if (String(num_seguridad) !== String(card.cvv)) {
-      const reason: DeniedReason = "INVALID_CVV";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-        [card.card_number, amount, reason, storeValue]
-      );
-      return res.status(403).json({ status: "DENIED", denied_reason: reason });
-    }
-
-    // 6) Nombre (comparación suave; si no quieres forzar, comenta este bloque)
-    if (normalizeName(nombre as string) && normalizeName(card.cardholder_name)) {
-      if (normalizeName(nombre as string) !== normalizeName(card.cardholder_name)) {
-        const reason: DeniedReason = "NAME_MISMATCH";
-        await pool.query(
-          `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-          VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-          [card.card_number, amount, reason, storeValue]
-        );
-        return res.status(403).json({ status: "DENIED", denied_reason: reason });
-      }
-    }
-
-    // 7) Duplicada (mismo monto+tienda en últimos 60s)
-    if (await isDuplicateTxn(card.card_number, amount, storeValue, 60)) {
-      const reason: DeniedReason = "DUPLICATE";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4)`,
-        [card.card_number, amount, reason, storeValue]
-      );
-      return res.status(403).json({ status: "DENIED", denied_reason: reason });
-    }
-
-    // 8) Velocity (>=5 aprobadas en el último minuto)
-    if (await exceedsVelocity(card.card_number, 5, 1)) {
-      const reason: DeniedReason = "VELOCITY_LIMIT";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, description, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4, $5)`,
-        [card.card_number, amount, reason, DENIAL_MESSAGES[reason], storeValue]
-      );
-      return res.status(429).json({ status: "DENIED", denied_reason: reason, message: DENIAL_MESSAGES[reason] });
-    }
-
-    // 9) Límites y fondos
-    const currentBalance = Number(card.credit_limit) - Number(card.available_credit);
-    if (currentBalance + amount > Number(card.credit_limit)) {
-      const reason: DeniedReason = "OVER_LIMIT";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, description, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4, $5)`,
-        [card.card_number, amount, reason, DENIAL_MESSAGES[reason], storeValue]
-      );
-      return res.status(402).json({ status: "DENIED", denied_reason: reason, message: DENIAL_MESSAGES[reason] });
-    }
-    if (Number(card.available_credit) < amount) {
-      const reason: DeniedReason = "INSUFFICIENT_FUNDS";
-      await pool.query(
-        `INSERT INTO card_transaction (card_number, type, amount, status, denied_reason, description, store)
-        VALUES ($1, 'PURCHASE', $2, 'DENIED', $3, $4, $5)`,
-        [card.card_number, amount, reason, DENIAL_MESSAGES[reason], storeValue]
-      );
-      return res.status(402).json({ status: "DENIED", denied_reason: reason, message: DENIAL_MESSAGES[reason] });
-    }
-
+    // Reglas de decisión (solo marcan status + denied_reason)
+    // NOTA: no hacemos INSERT aquí; el INSERT es único y está más abajo.
     if (!card) {
       status = "DENIED";
-    } else if (
-      card.cardholder_name !== nombre ||
-      card.expiration_date !== fecha_venc ||
-      card.security_code !== num_seguridad ||
-      card.status !== "active"
-    ) {
+      denied_reason = "CARD_NOT_FOUND";
+    } else if (card.status !== "active") {
       status = "DENIED";
-    } else if (parseFloat(monto as string) > parseFloat(card.available_credit)) {
+      denied_reason = "CARD_INACTIVE";
+    } else if (String(card.cardholder_name).trim().toLowerCase() !== String(nombre).trim().toLowerCase()) {
       status = "DENIED";
-    } else if (parseInt(card.expiration_date) < parseInt(getTodayYearMonth())) {
+      denied_reason = "NAME_MISMATCH";
+    } else if (String(card.expiration_date) !== String(fecha_venc)) {
       status = "DENIED";
+      denied_reason = "INVALID_EXPIRY_FORMAT"; // o "EXPIRED_CARD" si quieres validar formato vs. vigencia
+    } else if (String(card.security_code) !== String(num_seguridad)) {
+      status = "DENIED";
+      denied_reason = "INVALID_CVV";
+    } else if (parseInt(card.expiration_date as string, 10) < parseInt(getTodayYearMonth(), 10)) {
+      status = "DENIED";
+      denied_reason = "EXPIRED_CARD";
+    } else if (parseFloat(monto as string) > parseFloat(card.available_credit as any)) {
+      status = "DENIED";
+      denied_reason = "INSUFFICIENT_FUNDS";
     } else {
       status = "APPROVED";
       auth_status = "APROBADO";
-      numero_autorizacion = Math.floor(100000 + Math.random() * 900000).toString();
+      numero_autorizacion = genAuthNumber();
     }
 
     // ✅ CORREGIDO: Asegurar que store tenga un valor
     // const storeValue = tienda || "Tienda Online"; // ← Valor por defecto
 
+    const storeValue = (tienda as string) || "Tienda Online";
+
+    // INSERT ÚNICO
     const trResult = await pool.query(
-      `INSERT INTO card_transaction (card_number, type, amount, status, description, store, denied_reason, authorization_id)
-       VALUES ($1, 'PURCHASE', $2, $3, $4, $5, NULL, NULL) RETURNING transaction_id`,
-      [tarjeta, monto, status, `Compra en ${storeValue}`, storeValue] // ← Usar storeValue en ambos lugares
-    );
+      `INSERT INTO card_transaction
+        (card_number, type, amount, status, denied_reason, description, store, authorization_id)
+      VALUES
+        ($1, 'PURCHASE', $2, $3, $4, $5, $6, NULL)
+      RETURNING transaction_id`,
+      [
+        tarjeta,
+        monto,
+        status,
+        status === "DENIED" ? denied_reason : null, // ← guardamos SOLO el código
+        `Compra en ${storeValue}`,
+        storeValue,
+      ]
+);
+
 
     console.log('✅ Transaction inserted with store:', storeValue);
 
+    // Si fue aprobada, debitamos
     if (status === "APPROVED") {
       await pool.query(
         "UPDATE credit_card SET available_credit = available_credit - $1 WHERE card_number = $2",
@@ -593,7 +498,7 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     await pool.query("COMMIT");
 
     const response = {
-      emisor: card?.emisor_id || "CREDITSYSTEM001",
+      emisor: "AMEX",
       tarjeta,
       status: auth_status,
       numero: numero_autorizacion,
