@@ -9,6 +9,8 @@ import {
   updateCreditCardStatus,
   softDeleteCreditCard,
   listUserCreditCards,
+  getCardStatement,
+  getCardTransactions,
 } from "../controllers/creditCard.controller.ts";
 import { authMiddleware } from "../middlewares/auth.ts";
 
@@ -63,7 +65,7 @@ router.post("/emitir", authMiddleware, issueCreditCard);
 
 /**
  * @swagger
- * /api/tarjeta-credito/{tarjeta_numero}/renovar:
+ * /api/tarjeta-credito/{card_number}/renovar:
  *   put:
  *     summary: Renueva Tarjeta de Credito (nueva fecha de vencimiento y cvv)
  *     tags: [TarjetaCredito]
@@ -71,7 +73,7 @@ router.post("/emitir", authMiddleware, issueCreditCard);
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: tarjeta_numero
+ *         name: card_number
  *         schema:
  *           type: string
  *         required: true
@@ -82,11 +84,11 @@ router.post("/emitir", authMiddleware, issueCreditCard);
  *       404:
  *         description: No Encontrado
  */
-router.put("/:tarjeta_numero/renovar", authMiddleware, renewCreditCard);
+router.put("/:card_number/renovar", authMiddleware, renewCreditCard);
 
 /**
  * @swagger
- * /api/tarjeta-credito/{tarjeta_numero}/pagar:
+ * /api/tarjeta-credito/{card_number}/pagar:
  *   post:
  *     summary: Pagar Tarjeta Credito
  *     tags: [TarjetaCredito]
@@ -94,7 +96,7 @@ router.put("/:tarjeta_numero/renovar", authMiddleware, renewCreditCard);
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: tarjeta_numero
+ *         name: card_number
  *         schema:
  *           type: string
  *         required: true
@@ -116,11 +118,11 @@ router.put("/:tarjeta_numero/renovar", authMiddleware, renewCreditCard);
  *       400:
  *         description: Error
  */
-router.post("/:tarjeta_numero/pagar", authMiddleware, payCreditCard);
+router.post("/:card_number/pagar", authMiddleware, payCreditCard);
 
 /**
  * @swagger
- * /api/tarjeta-credito/{tarjeta_numero}:
+ * /api/tarjeta-credito/{card_number}:
  *   patch:
  *     summary: Actualizar Datos Tarjeta Credito (exp date, limite, etc)
  *     tags: [TarjetaCredito]
@@ -128,7 +130,7 @@ router.post("/:tarjeta_numero/pagar", authMiddleware, payCreditCard);
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: tarjeta_numero
+ *         name: card_number
  *         required: true
  *         schema:
  *           type: string
@@ -158,11 +160,11 @@ router.post("/:tarjeta_numero/pagar", authMiddleware, payCreditCard);
  *       404:
  *         description: No Encontrada
  */
-router.patch("/:tarjeta_numero", authMiddleware, updateCreditCard);
+router.patch("/:card_number", authMiddleware, updateCreditCard);
 
 /**
  * @swagger
- * /api/tarjeta-credito/{tarjeta_numero}/status:
+ * /api/tarjeta-credito/{card_number}/status:
  *   patch:
  *     summary: Modificar Estado Tarjeta Credito (active, blocked, lost, etc)
  *     tags: [TarjetaCredito]
@@ -170,7 +172,7 @@ router.patch("/:tarjeta_numero", authMiddleware, updateCreditCard);
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: tarjeta_numero
+ *         name: card_number
  *         required: true
  *         schema:
  *           type: string
@@ -191,7 +193,7 @@ router.patch("/:tarjeta_numero", authMiddleware, updateCreditCard);
  *       404:
  *         description: No Encontrada
  */
-router.patch("/:tarjeta_numero/status", authMiddleware, updateCreditCardStatus);
+router.patch("/:card_number/status", authMiddleware, updateCreditCardStatus);
 
 /**
  * @swagger
@@ -249,5 +251,102 @@ router.delete("/:card_number", authMiddleware, softDeleteCreditCard);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/", authMiddleware, listUserCreditCards);
+
+/**
+ * @swagger
+ * /api/tarjeta-credito/{card_number}/transacciones:
+ *   get:
+ *     summary: Obtener historial de transacciones de una tarjeta
+ *     tags: [TarjetaCredito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: card_number
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Número de tarjeta de crédito
+ *     responses:
+ *       200:
+ *         description: Lista de transacciones
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   transaction_id:
+ *                     type: integer
+ *                   card_number:
+ *                     type: string
+ *                   type:
+ *                     type: string
+ *                   amount:
+ *                     type: number
+ *                   description:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   timestamp:
+ *                     type: string
+ */
+router.get("/:card_number/transacciones", authMiddleware, getCardTransactions);
+
+/**
+ * @swagger
+ * /api/tarjeta-credito/{card_number}/estado-cuenta:
+ *   get:
+ *     summary: Obtener estado de cuenta de una tarjeta
+ *     tags: [TarjetaCredito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: card_number
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Número de tarjeta de crédito
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *         description: Periodo en formato yyyymm (opcional)
+ *     responses:
+ *       200:
+ *         description: Estado de cuenta
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 card_number:
+ *                   type: string
+ *                 period:
+ *                   type: string
+ *                 start_date:
+ *                   type: string
+ *                 end_date:
+ *                   type: string
+ *                 previous_balance:
+ *                   type: number
+ *                 purchases:
+ *                   type: number
+ *                 payments:
+ *                   type: number
+ *                 current_balance:
+ *                   type: number
+ *                 due_date:
+ *                   type: string
+ *                 minimum_payment:
+ *                   type: number
+ *                 transactions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ */
+router.get("/:card_number/estado-cuenta", authMiddleware, getCardStatement);
 
 export default router;
