@@ -60,7 +60,7 @@ import { authorizeTransaction } from "../controllers/creditCard.controller.ts";
 
 /**
  * @swagger
- * /authorization:
+ * /autorizacion:
  *   get:
  *     summary: Autorizar transacción de tarjeta de crédito
  *     tags: [TarjetaCredito]

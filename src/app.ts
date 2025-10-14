@@ -23,6 +23,6 @@ app.use("/api/usuarios", userRoutes);
 app.use("/api/bancos", bankRoutes);
 app.use("/api/cuentas-banco", bankAccountRoutes);
 app.use("/api/tarjeta-credito", creditCardRoutes);
-app.use("/authorization", authorizationRoutes);
+app.use("/autorizacion", authorizationRoutes);
 
 export default app;
