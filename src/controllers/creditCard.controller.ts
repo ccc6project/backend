@@ -426,11 +426,51 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
       `SELECT * FROM credit_card WHERE card_number = $1 FOR UPDATE`,
       [tarjeta]
     );
+    console.log()
     const card = result.rows[0];
+
+    // Normalizador simple (no cambies si ya tienes uno)
+    const norm = (s: any) => decodeURIComponent(String(s ?? ""))
+      .replace(/\+/g, " ")   // por si viene con +
+      .trim()                // bordes
+      .replace(/\s+/g, "")   // <-- quita *todos* los espacios
+      .toUpperCase();
+if (card) {
+  console.log(norm(card.cardholder_name));
+  console.log(norm(card.cardholder_name));
+}
+console.log(norm(nombre));
+console.log(norm(nombre));
+// console.log(norm(card.cardholder_name) == norm(nombre))
+
+    const nombreOk = card ? norm(card.cardholder_name) == norm(nombre) : false;
+console.log(!card)
+console.log(nombreOk)
+    // 1) Early exit: tarjeta inexistente o nombre no coincide ⇒ DENEGADO, sin INSERT
+    if (!card || !nombreOk) {
+      await pool.query("ROLLBACK");
+
+      // Reusa tu forma actual de responder si ya tienes helper; si no, este JSON:
+      const emisor = (card && (card as any).issuer) || "DESCONOCIDO";
+
+
+      const response = {
+          emisor,
+          tarjeta: String(tarjeta),
+          status: "DENEGADOs",
+          numero: "0",
+      };
+
+      const formatValue = formato
+        ? (String(formato).toLowerCase() as 'json' | 'xml')
+        : chooseFormat(req);
+      sendFormatted(res, response, formatValue, "autorizacion");
+      return;
+    }
 
     let auth_status = "DENEGADO";
     let numero_autorizacion = "0";
-    let status: "APPROVED" | "DENIED" | "INCOMPLETE" = "INCOMPLETE";
+    let status: "APPROVED" | "DENIED" = "DENIED";
     let denied_reason: string | null = null;
 
     // Reglas de decisión (solo marcan status + denied_reason)
@@ -441,7 +481,7 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
     } else if (card.status !== "active") {
       status = "DENIED";
       denied_reason = "CARD_INACTIVE";
-    } else if (String(card.cardholder_name).trim().toLowerCase() !== String(nombre).trim().toLowerCase()) {
+    } else if (norm(card.cardholder_name) !== norm(nombre)) {
       status = "DENIED";
       denied_reason = "NAME_MISMATCH";
     } else if (String(card.expiration_date) !== String(fecha_venc)) {
@@ -519,7 +559,18 @@ export const authorizeTransaction = async (req: Request, res: Response) => {
         [tarjeta, monto || 0, "INCOMPLETE TRANSACTION", storeValue]
       );
     }
-    res.status(500).json({ error: err.message });
+          const response = {
+          emisor:"",
+          tarjeta: "",
+          status: "DENEGADO",
+          numero: "0",
+      };
+
+      const formatValue = formato
+        ? (String(formato).toLowerCase() as 'json' | 'xml')
+        : chooseFormat(req);
+      sendFormatted(res, response, formatValue, "autorizacion");
+      return;
   }
 };
 

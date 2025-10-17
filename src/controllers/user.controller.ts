@@ -12,10 +12,15 @@ export const createUser = async (req: Request, res: Response) => {
   try {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
+    const name_formatted = decodeURIComponent(String(name ?? ""))
+      .replace(/\+/g, " ")   // por si viene con +
+      .trim()                // bordes
+      .replace(/\s+/g, "")   // <-- quita *todos* los espacios
+      .toUpperCase();
 
     const result = await pool.query(
       "INSERT INTO users (name, email, password, document_type, document_number) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [name, email, hashedPassword, document_type, document_number]
+      [name_formatted, email, hashedPassword, document_type, document_number]
     );
     const user = result.rows[0];
     // Remove password from output
