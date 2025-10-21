@@ -10,7 +10,13 @@ export function sendFormatted(
   rootName = "data"
 ) {
   if (format === "xml") {
-    const builder = new Builder({ rootName });
+    // const builder = new Builder({ rootName });
+    const builder = new Builder({
+      rootName,
+      headless: true,              // <- omit <?xml ... ?> line
+      // optional: pretty print control
+      // renderOpts: { pretty: true, indent: "  ", newline: "\n" },
+    });
     const xml = builder.buildObject(data);
     res.type("application/xml").send(xml);
   } else {
