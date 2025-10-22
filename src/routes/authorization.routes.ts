@@ -11,7 +11,7 @@ import { authorizeTransaction } from "../controllers/creditCard.controller.ts";
  *       properties:
  *         emisor:
  *           type: string
- *           example: "CREDITSYSTEM001"
+ *           example: "AMEX"
  *         tarjeta:
  *           type: string
  *           example: "1234567890123456"
@@ -50,7 +50,7 @@ import { authorizeTransaction } from "../controllers/creditCard.controller.ts";
  *           enum: [active, blocked, lost, deleted]
  *         emisor_id:
  *           type: string
- *           example: "CREDITSYSTEM001"
+ *           example: "AMEX"
  *     ErrorResponse:
  *       type: object
  *       properties:
@@ -60,7 +60,7 @@ import { authorizeTransaction } from "../controllers/creditCard.controller.ts";
 
 /**
  * @swagger
- * /autorizacion:
+ * /AMERICAN_EXPRESS/autorizacion:
  *   get:
  *     summary: Autorizar transacción de tarjeta de crédito
  *     tags: [TarjetaCredito]
@@ -107,14 +107,14 @@ import { authorizeTransaction } from "../controllers/creditCard.controller.ts";
  *             schema:
  *               $ref: '#/components/schemas/AutorizacionRespuesta'
  *             example:
- *               emisor: "CREDITSYSTEM001"
+ *               emisor: "AMEX"
  *               tarjeta: "1234567890123456"
  *               status: "APROBADO"
  *               numero: "654321"
  *           application/xml:
  *             example: |
  *               <autorizacion>
- *                 <emisor>CREDITSYSTEM001</emisor>
+ *                 <emisor>AMEX</emisor>
  *                 <tarjeta>1234567890123456</tarjeta>
  *                 <status>APROBADO</status>
  *                 <numero>654321</numero>

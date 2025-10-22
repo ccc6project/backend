@@ -148,7 +148,7 @@ export const issueCreditCard = async (req: Request, res: Response) => {
         due_date || null,
         interest || 0.28,
         account.account_id,
-        emisor_id || 'CREDITSYSTEM001'
+        emisor_id || 'AMERICAN_EXPRESS'
       ]
     );
     const card = result.rows[0];
